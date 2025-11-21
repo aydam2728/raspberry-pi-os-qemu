@@ -52,6 +52,67 @@ static int usb_core_reset(void) {
     return 0;
 }
 
+/*
+ * Initialise le DWC2 en mode Hôte, allume le port et effectue le reset.
+ */
+static int usb_host_init(void) {
+    uint32_t reg;
+    uint32_t timeout = 10000;
+
+    // -- FIFO --
+    
+    // GRXFSIZ (Receive FIFO Size Register)
+    usb_write(USB_GRXFSIZ, 0x200); //(2KB)
+    
+    // GNPTXFSIZ (Non-Periodic Transmit FIFO Size Register)
+    usb_write(USB_GNPTXFSIZ, (0x100 << 16) | 0x200);
+    
+    // -- HCFG --
+    
+    reg = usb_read(0x400); // USB_HCFG
+   
+    usb_write(0x400, reg); // USB_HCFG
+
+    // -- Activation du Port et Réinitialisation (HPRT) --
+    
+    // Port VBUS
+    reg = usb_read(USB_HPRT); 
+    reg |= HPRT_PRTPWR;
+    usb_write(USB_HPRT, reg); 
+    delay(20000); // wait stable usb alimentation
+    
+    // Port Reset
+    reg = usb_read(USB_HPRT); 
+    reg |= HPRT_PRTRST; // HPRT_PRTRST (Définition supposée)
+    usb_write(USB_HPRT, reg); 
+    delay(10000); // usb specs
+    
+    // Fin de la Réinitialisation
+    reg = usb_read(USB_HPRT);
+    reg &= ~HPRT_PRTRST;
+    usb_write(USB_HPRT, reg);
+    
+    // waiting reinit
+    timeout = 10000;
+    while(usb_read(USB_HPRT) & HPRT_PRTRST) {
+         if (--timeout == 0) {
+            printf("USB: Timeout waiting for Port Reset completion\r\n");
+            return -1;
+        }
+        delay(10);
+    }
+    
+    // Checkup new config
+    if (usb_read(0x440) & HPRT_PRTCONNS) { 
+        printf("USB: LAN9514 detected. Port ready for enumeration.\r\n");
+    } else {
+        printf("USB: No device detected after port reset (LAN9514 non-connecté/non-fonctionnel).\r\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 /* Initialize USB controller */
 static int usb_init(void) {
     uint32_t reg;
@@ -67,11 +128,18 @@ static int usb_init(void) {
     reg = usb_read(USB_GAHBCFG);
     reg |= USB_GAHBCFG_GLBL_INTR_EN;
     reg |= USB_GAHBCFG_HBSTLEN_INCR4;
+    reg |= USB_GAHBCFG_DMA_EN;
     usb_write(USB_GAHBCFG, reg);
     
-    /* Configure USB */
+    /* Configure USB (GUSBCFG) */
     reg = usb_read(USB_GUSBCFG);
+    // DWC2 en mode Hôte Forcé, 
     usb_write(USB_GUSBCFG, reg);
+    
+    if (usb_host_init() < 0) {
+        printf("NET: Failed to initialize USB host port\r\n");
+        return -1;
+    }
     
     printf("USB: Controller initialized\r\n");
     
