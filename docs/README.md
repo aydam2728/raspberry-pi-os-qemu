@@ -1,4 +1,5 @@
 # A tiny educational kernel for Raspberry Pi 3
+# test
 A tiny kernel *incrementally built* for OS education.
 Start with minimal, baremetal code. Then add kernel features in small doses.
 Each experiment is self-contained and can run on both QEMU and real Raspberry Pi 3 hardware.
