@@ -86,4 +86,9 @@
 #define HPRT_PRTCONNS           (1 << 1)  /* Port Connect Status */
 #define HPRT_PRTENA             (1 << 2)  /* Port Enable */
 
+/* Host Channel Registers */
+#define HCCHAR(n) 0x500 + 0x20 * n
+#define HCTSIZ(n) 0x508 + 0x20 * n
+#define HCDMA(n) 0x50C + 0x20 * n
+
 #endif
