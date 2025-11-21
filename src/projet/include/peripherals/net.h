@@ -74,4 +74,16 @@
 #define USB_GRSTCTL_TXFFLSH         (1 << 5)   /* TxFIFO Flush */
 #define USB_GRSTCTL_AHBIDLE         (1 << 31)  /* AHB Master Idle */
 
+
+/* USB Host Registers Offsets (Starting at 0x400) */
+#define USB_HCFG        0x400  /* Host Configuration Register */
+#define USB_HPRT        0x440  /* Host Port Control and Status Register */
+
+/* HPRT Register bits*/
+#define HPRT_PRTSPD_HIGH        (0 << 17) /* Port Speed High (valeur dépendante) */
+#define HPRT_PRTPWR             (1 << 12) /* Port Power */
+#define HPRT_PRTRST             (1 << 8)  /* Port Reset */
+#define HPRT_PRTCONNS           (1 << 1)  /* Port Connect Status */
+#define HPRT_PRTENA             (1 << 2)  /* Port Enable */
+
 #endif
