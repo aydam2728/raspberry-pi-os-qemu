@@ -14,6 +14,7 @@
 
 #define TASK_RUNNING				0
 #define TASK_ZOMBIE				1
+#define TASK_INTERRUPTIBLE			2
 
 #define PF_KTHREAD				0x00000002
 
@@ -52,6 +53,8 @@ struct mm_struct {
 	int kernel_pages_count;
 	/* keep track of which (kernel) pages are used for this task. */
 	unsigned long kernel_pages[MAX_PROCESS_PAGES];
+
+	
 };
 
 struct task_struct {
@@ -62,6 +65,8 @@ struct task_struct {
 	long preempt_count;
 	unsigned long flags;
 	struct mm_struct mm;
+
+	unsigned long channel;  // for sleep_on / wake_up
 };
 
 extern void sched_init(void);
@@ -71,7 +76,10 @@ extern void preempt_disable(void);
 extern void preempt_enable(void);
 extern void switch_to(struct task_struct* next);
 extern void cpu_switch_to(struct task_struct* prev, struct task_struct* next);
+extern void sleep_on(unsigned long chan);
+extern void wake_up(unsigned long chan);
 extern void exit_process(void);
+
 
 #define INIT_TASK \
 /*cpu_context*/ { { 0,0,0,0,0,0,0,0,0,0,0,0,0}, \
