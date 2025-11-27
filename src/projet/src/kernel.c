@@ -10,6 +10,7 @@
 #include "mini_uart.h"
 #include "sys.h"
 #include "user.h"
+#include "peripherals/net.h"
 
 
 void kernel_process(){
@@ -36,6 +37,16 @@ void kernel_main()
 //	generic_timer_init();
 	enable_interrupt_controller();
 	enable_irq();
+
+	// --- INITIALISATION DU PILOTE ETHERNET ---
+    printf("NET: Initialisation du driver réseau...\n\r");
+    if (net_init() < 0) {
+        printf("NET: L'initialisation du réseau a échoué ! Arrêt.\n\r");
+        // Vous pouvez décider d'arrêter le boot ou de continuer sans réseau
+        // return; 
+    }
+    printf("NET: Initialisation du driver réseau terminée.\n\r");
+    // ------------------------------------------
 
 	int res = copy_process(PF_KTHREAD, (unsigned long)&kernel_process, 0);
 	if (res < 0) {

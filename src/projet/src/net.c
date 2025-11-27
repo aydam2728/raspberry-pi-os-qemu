@@ -1,18 +1,33 @@
-#include "net.h"
 #include "peripherals/net.h"
 #include "peripherals/base.h"
 #include "utils.h"
 #include "printf.h"
+#include <stddef.h>
+#include <stdint.h>
 
+
+// --- Variables Globales ---
 
 static struct net_device net_dev;
-
-static volatile uint32_t *usb_regs = (uint32_t *)USB_BASE;
 
 /* Default MAC address */
 static uint8_t default_mac[ETH_ALEN] = {0xB8, 0x27, 0xEB, 0x00, 0x00, 0x01};
 
-/* Helper functions for USB register access */
+// --- Structures USB ---
+
+// Structure simplifiée du Paquet Setup (8 octets)
+// AJOUT : __attribute__((aligned(4))) pour s'assurer que l'adresse est compatible DMA
+struct usb_setup_packet {
+    uint8_t bmRequestType;  // Type et Direction de la requête (D->H ou H->D)
+    uint8_t bRequest;       // Code de la requête (ex: 0x05 pour SET_ADDRESS)
+    uint16_t wValue;        // Valeur (ex: la nouvelle adresse)
+    uint16_t wIndex;        // Index (souvent 0)
+    uint16_t wLength;       // Longueur des données à transférer (0 pour SET_ADDRESS)
+} __attribute__((packed, aligned(4))); 
+
+
+// --- Fonctions d'Accès aux Registres ---
+
 static inline uint32_t usb_read(uint32_t reg) {
     return *(volatile uint32_t *)(USB_BASE + reg);
 }
@@ -20,6 +35,9 @@ static inline uint32_t usb_read(uint32_t reg) {
 static inline void usb_write(uint32_t reg, uint32_t value) {
     *(volatile uint32_t *)(USB_BASE + reg) = value;
 }
+
+
+// --- Fonctions DWC2 Core et Host ---
 
 /* USB Core Reset */
 static int usb_core_reset(void) {
@@ -52,6 +70,149 @@ static int usb_core_reset(void) {
     return 0;
 }
 
+/* Attend la fin d'un transfert sur un canal (polling). */
+static int usb_host_wait_xfer_complete(uint32_t chan_num) {
+    uint32_t timeout = 100000; // Augmenté pour sécurité
+    // Utilisation des macros HCINT(n) et HCCHAR(n)
+    uint32_t hcint_reg = HCCHAR(chan_num) + 0x04; // HCINTn
+    uint32_t hcint;
+
+    while (timeout > 0) {
+        hcint = usb_read(hcint_reg);
+
+        // Si le transfert est terminé (succès ou erreur)
+        if (hcint & (HCINT_XFRC | HCINT_CHH | HCINT_AHBERR)) {
+            // Acquittement de l'interruption (Clear on read/write)
+            usb_write(hcint_reg, hcint);
+            
+            if (hcint & HCINT_XFRC) {
+                return 0; // Succès (Transfer Complete)
+            }
+            if (hcint & (HCINT_CHH | HCINT_AHBERR)) {
+                printf("USB: Transfert échoué sur HC%d. HCINT=0x%x\r\n", chan_num, hcint);
+                return -1; // Échec
+            }
+        }
+        delay(10);
+        timeout--;
+    }
+
+    printf("USB: Timeout d'attente sur HC%d.\r\n", chan_num);
+    return -1;
+}
+
+/*
+ * Exécute un transfert de contrôle USB sur HC0 (Endpoint 0).
+ * data_buf : Buffer pour les données (NULL pour Setup/Status).
+ * data_len : Longueur des données.
+ * dev_addr : Adresse USB du périphérique (0 au début de l'énumération).
+ */
+static int usb_control_transfer(uint8_t dev_addr, struct usb_setup_packet *setup, uint8_t *data_buf, uint32_t data_len) {
+    uint32_t hcchar;
+    uintptr_t dma_addr;
+    const uint32_t chan_num = 0; // Utilise toujours le Canal 0 pour EP0
+    
+    // --- Phase 1 : SETUP (Toujours OUT) ---
+    
+    printf("USB: Phase SETUP (Addr=%d)...\r\n", dev_addr);
+    
+    // Conversion d'adresse pour le DMA
+    dma_addr = (uintptr_t)setup;
+
+    // 1. Configurer HCCHAR0 (Caractéristiques du Canal 0)
+    // CORRECTION ICI : Utilisation des bonnes macros de décalage
+    hcchar = HCCHAR_DEVADDR(dev_addr) |      // Bits 22-28
+             HCCHAR_EPNUM(0) |               // Bits 11-14 (EP0)
+             HCCHAR_EPTYPE(EPTYPE_CTRL) |    // Bits 18-19 (Control)
+             HCCHAR_EPDIR_OUT |              // Bit 15 (OUT)
+             HCCHAR_MPS(64);                 // Bits 0-10 (Max Packet 64)
+    
+    // Note: On n'active pas encore (CHENA), on écrit la config d'abord
+    usb_write(HCCHAR(chan_num), hcchar);
+
+    // 2. Configurer HCTSIZ0 (Taille du Transfert)
+    uint32_t hctsiz_setup = HCTSIZ_PID_SETUP |  // PID : Setup Packet
+                            HCTSIZ_PKTCNT(1) |  // 1 paquet
+                            HCTSIZ_XFRSIZ(8);   // 8 octets
+    
+    usb_write(HCTSIZ(chan_num), hctsiz_setup);
+    usb_write(HCDMA(chan_num), dma_addr);
+
+    // 3. Activer le Canal
+    hcchar |= HCCHAR_CHENA;
+    usb_write(HCCHAR(chan_num), hcchar);
+
+    if (usb_host_wait_xfer_complete(chan_num) < 0) {
+        printf("USB: Échec Phase SETUP.\r\n");
+        return -1;
+    }
+
+    // --- Phase 2 : DATA (Non implémentée pour SET_ADDRESS) ---
+    if (data_len > 0) {
+        printf("USB: Phase DATA non implémentée.\r\n");
+        return -1;
+    }
+    
+    // --- Phase 3 : STATUS (IN pour un Setup OUT) ---
+    
+    printf("USB: Phase STATUS...\r\n");
+    
+    // 1. Configurer HCCHAR0 pour STATUS IN (réception ZLP)
+    hcchar = HCCHAR_DEVADDR(dev_addr) |
+             HCCHAR_EPNUM(0) |
+             HCCHAR_EPTYPE(EPTYPE_CTRL) |
+             HCCHAR_EPDIR_IN |               // CORRECTION : IN est au bit 15
+             HCCHAR_MPS(64);
+             
+    usb_write(HCCHAR(chan_num), hcchar);
+
+    // 2. Configurer HCTSIZ0 pour la phase STATUS (paquet ZLP)
+    // Utiliser PID_DATA1 (toggle data)
+    uint32_t hctsiz_status = HCTSIZ_PID_DATA1 |  
+                             HCTSIZ_PKTCNT(1) |
+                             HCTSIZ_XFRSIZ(0);   // 0 octet (ZLP)
+    
+    usb_write(HCTSIZ(chan_num), hctsiz_status);
+    // HCDMA n'a pas d'importance pour un ZLP IN, mais on peut le laisser à 0 ou pointer sur un buffer dummy
+    usb_write(HCDMA(chan_num), 0);
+
+    // 3. Activer le Canal
+    hcchar |= HCCHAR_CHENA;
+    usb_write(HCCHAR(chan_num), hcchar);
+
+    if (usb_host_wait_xfer_complete(chan_num) < 0) {
+        printf("USB: Échec Phase STATUS.\r\n");
+        return -1;
+    }
+    
+    printf("USB: Transfert de contrôle terminé avec succès.\r\n");
+    return 0;
+}
+
+/* Attribue une nouvelle adresse USB au périphérique (initialement à 0) */
+static int usb_enumerate_set_address(uint8_t new_addr) {
+    // Paquet Setup pour SET_ADDRESS
+    struct usb_setup_packet setup = {
+        .bmRequestType = 0x00,      // Host to Device, Standard, Device
+        .bRequest      = 0x05,      // SET_ADDRESS
+        .wValue        = new_addr,  // La nouvelle adresse
+        .wIndex        = 0x0000,
+        .wLength       = 0x0000
+    };
+    
+    // Le transfert SET_ADDRESS doit être envoyé à l'adresse 0 (l'adresse par défaut)
+    if (usb_control_transfer(0, &setup, NULL, 0) < 0) {
+        return -1;
+    }
+    
+    // Après le succès du transfert, le périphérique prend sa nouvelle adresse
+    printf("USB: Adresse 0x%x attribuée avec succès.\r\n", new_addr);
+    // Note: Vous devrez stocker cette adresse dans la structure net_dev pour les futurs transferts.
+    
+    return 0;
+}
+
+
 /*
  * Initialise le DWC2 en mode Hôte, allume le port et effectue le reset.
  */
@@ -59,40 +220,45 @@ static int usb_host_init(void) {
     uint32_t reg;
     uint32_t timeout = 10000;
 
-    // -- FIFO --
+    // --- FIFO Configuration ---
     
     // GRXFSIZ (Receive FIFO Size Register)
-    usb_write(USB_GRXFSIZ, 0x200); //(2KB)
+    usb_write(USB_GRXFSIZ, 0x200); // (2KB)
     
     // GNPTXFSIZ (Non-Periodic Transmit FIFO Size Register)
-    usb_write(USB_GNPTXFSIZ, (0x100 << 16) | 0x200);
+    usb_write(USB_GNPTXFSIZ, (0x100 << 16) | 0x200); // Start 0x200, Size 0x100
     
-    // -- HCFG --
+    // --- HCFG Configuration (Host Configuration Register) ---
     
-    reg = usb_read(0x400); // USB_HCFG
-   
-    usb_write(0x400, reg); // USB_HCFG
+    reg = usb_read(USB_HCFG);
+    // Ici, vous pourriez configurer la vitesse et le bus Host si nécessaire.
+    usb_write(USB_HCFG, reg);
 
-    // -- Activation du Port et Réinitialisation (HPRT) --
+    // --- Activation du Port et Réinitialisation (HPRT) ---
     
-    // Port VBUS
+    // 1. Port VBUS Power On
     reg = usb_read(USB_HPRT); 
     reg |= HPRT_PRTPWR;
     usb_write(USB_HPRT, reg); 
-    delay(20000); // wait stable usb alimentation
+    delay(50000); // Wait 50ms+ for power stabilization
+
+    // CRITIQUE : Nettoyage des indicateurs de changement AVANT le reset
+    reg = usb_read(USB_HPRT);
+    reg |= (HPRT_PRTCONCHG | HPRT_PRTENCHG | HPRT_PRTOVRCURRCHG | HPRT_PRTRSTCHG);
+    usb_write(USB_HPRT, reg);
     
-    // Port Reset
+    // 2. Port Reset
     reg = usb_read(USB_HPRT); 
-    reg |= HPRT_PRTRST; // HPRT_PRTRST (Définition supposée)
+    reg |= HPRT_PRTRST;
     usb_write(USB_HPRT, reg); 
-    delay(10000); // usb specs
+    delay(50000); // Wait 50ms+ (USB Specs + Marge QEMU)
     
-    // Fin de la Réinitialisation
+    // 3. End Reset
     reg = usb_read(USB_HPRT);
     reg &= ~HPRT_PRTRST;
     usb_write(USB_HPRT, reg);
     
-    // waiting reinit
+    // 4. Waiting for Port Reset completion
     timeout = 10000;
     while(usb_read(USB_HPRT) & HPRT_PRTRST) {
          if (--timeout == 0) {
@@ -102,11 +268,25 @@ static int usb_host_init(void) {
         delay(10);
     }
     
-    // Checkup new config
-    if (usb_read(0x440) & HPRT_PRTCONNS) { 
-        printf("USB: LAN9514 detected. Port ready for enumeration.\r\n");
+    // CRITIQUE : Nettoyage des indicateurs de changement APRÈS le reset
+    // Cela débloque souvent la mise à jour du bit PRTCONNS sous QEMU
+    reg = usb_read(USB_HPRT);
+    reg |= (HPRT_PRTCONCHG | HPRT_PRTENCHG | HPRT_PRTOVRCURRCHG | HPRT_PRTRSTCHG);
+    usb_write(USB_HPRT, reg);
+
+    // Petit délai pour laisser le statut se stabiliser
+    delay(1000);
+
+    // 5. Check Connection
+    if (usb_read(USB_HPRT) & HPRT_PRTCONNS) { 
+        // Attendre un tout petit peu que le port s'active (PRTENA)
+        int retries = 100;
+        while (!(usb_read(USB_HPRT) & HPRT_PRTENA) && retries-- > 0) delay(100);
+        
+        printf("USB: LAN9514 detected. Port ready.\r\n");
     } else {
-        printf("USB: No device detected after port reset (LAN9514 non-connecté/non-fonctionnel).\r\n");
+        uint32_t debug_hprt = usb_read(USB_HPRT);
+        printf("USB: No device detected after port reset. HPRT=0x%x\r\n", debug_hprt);
         return -1;
     }
 
@@ -133,7 +313,8 @@ static int usb_init(void) {
     
     /* Configure USB (GUSBCFG) */
     reg = usb_read(USB_GUSBCFG);
-    // DWC2 en mode Hôte Forcé, 
+    // Ici, le mode Hôte Forcé est souvent configuré.
+    reg |= USB_GUSBCFG_FHMOD;
     usb_write(USB_GUSBCFG, reg);
     
     if (usb_host_init() < 0) {
@@ -170,13 +351,22 @@ int net_init(void) {
         return -1;
     }
     
+    // *****************************************************
+    // NOUVEAU : Étape 1 d'Énumération USB : SET_ADDRESS
+    // *****************************************************
+    uint8_t new_usb_addr = 1; 
+
+    printf("NET: Démarrage de l'énumération USB (SET_ADDRESS 0x%x)...\r\n", new_usb_addr);
+    if (usb_enumerate_set_address(new_usb_addr) < 0) {
+        printf("NET: Échec de l'énumération SET_ADDRESS.\r\n");
+        return -1;
+    }
+    
     /* Note: Complete SMSC LAN9514 initialization would require:
-     * 1. USB enumeration
-     * 2. Device descriptor reading
-     * 3. Configuration setup
+     * 2. Device descriptor reading (GET_DESCRIPTOR)
+     * 3. Configuration setup (SET_CONFIGURATION)
      * 4. Bulk endpoints setup
      * 5. SMSC-specific register configuration
-     * This is a simplified base implementation.
      */
     
     net_dev.state = NET_STATE_UP;
@@ -206,12 +396,6 @@ int net_send_packet(const uint8_t *packet, uint32_t length) {
     }
     
     /* TODO: Implement actual packet transmission via USB bulk endpoint */
-    /* This would require:
-     * 1. Setting up USB bulk OUT endpoint
-     * 2. Formatting data according to SMSC LAN9514 protocol
-     * 3. Initiating USB transfer
-     * 4. Waiting for completion
-     */
     
     printf("NET: Would send packet of %d bytes\r\n", length);
     net_dev.tx_packets++;
@@ -226,13 +410,6 @@ int net_receive_packet(uint8_t *packet, uint32_t max_length) {
     }
     
     /* TODO: Implement actual packet reception via USB bulk endpoint */
-    /* This would require:
-     * 1. Setting up USB bulk IN endpoint
-     * 2. Checking for available data
-     * 3. Reading data from USB
-     * 4. Parsing SMSC LAN9514 protocol header
-     * 5. Extracting Ethernet frame
-     */
     
     /* No packet available for now */
     return 0;
@@ -311,10 +488,4 @@ void net_print_stats(void) {
 /* IRQ handler */
 void net_irq_handler(void) {
     /* TODO: Handle network interrupts */
-    /* This would include:
-     * 1. Reading interrupt status
-     * 2. Handling received packets
-     * 3. Handling transmission completion
-     * 4. Handling errors
-     */
 }
