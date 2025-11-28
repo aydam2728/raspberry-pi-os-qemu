@@ -14,6 +14,7 @@
 
 #define TASK_RUNNING				0
 #define TASK_ZOMBIE				1
+#define TASK_INTERRUPTIBLE 			2
 
 #define PF_KTHREAD				0x00000002
 
@@ -62,6 +63,10 @@ struct task_struct {
 	long preempt_count;
 	unsigned long flags;
 	struct mm_struct mm;
+
+
+	// --- Ajout ---
+	unsigned long channel;
 };
 
 extern void sched_init(void);

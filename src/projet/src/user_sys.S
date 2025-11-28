@@ -3,6 +3,7 @@
 .set SYS_WRITE_NUMBER, 0 		// syscal numbers
 .set SYS_FORK_NUMBER, 1
 .set SYS_EXIT_NUMBER, 2
+.set SYS_INIT_RING_NUMBER 3
 
 .globl user_delay
 user_delay:
@@ -27,3 +28,10 @@ call_sys_fork:
 	mov w8, #SYS_FORK_NUMBER
 	svc #0
 	ret
+
+
+.globl call_sys_init_ringbuffer
+call_sys_init_ringbuffer:
+    mov x8, #SYS_INIT_RING_NUMBER
+    svc #0
+    ret

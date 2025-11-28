@@ -7,10 +7,8 @@
 #define RB_DATA_SIZE (PAGE_SIZE - (4 * sizeof(uint32_t)))
 
 struct ringbuffer {
-    // Les données sont au début de la page (choix de ta structure)
     uint8_t buffer[RB_DATA_SIZE];
     
-    // Les variables de contrôle sont à la fin
     volatile uint32_t read_pos;   // Tête de lecture
     volatile uint32_t write_pos;  // Tête d'écriture
     volatile uint32_t read_open;  // 1 = Lecteur actif, 0 = Lecteur parti

@@ -83,6 +83,31 @@ void timer_tick()
 	disable_irq();
 }
 
+// Endort la tâche courante en attendant un événement sur 'chan'
+void sleep_on(unsigned long chan) {
+    preempt_disable(); // On ne veut pas être interrompu pendant la transition
+    
+    current->channel = chan;
+    current->state = TASK_INTERRUPTIBLE; // On marque la tâche comme "non-exécutable"
+    
+    preempt_enable();
+    schedule(); // On force le changement de contexte immédiat -> le CPU va ailleurs
+}
+
+// Réveille toutes les tâches qui attendent sur 'chan'
+void wake_up(unsigned long chan) {
+    preempt_disable();
+    
+    for (int i = 0; i < NR_TASKS; i++) {
+        if (task[i] && task[i]->state == TASK_INTERRUPTIBLE && task[i]->channel == chan) {
+            task[i]->state = TASK_RUNNING; // La tâche redevient éligible au scheduler
+            task[i]->channel = 0;
+        }
+    }
+    
+    preempt_enable();
+}
+
 void exit_process(){
 	preempt_disable();
 	for (int i = 0; i < NR_TASKS; i++){
