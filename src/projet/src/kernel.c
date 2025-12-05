@@ -10,6 +10,8 @@
 #include "mini_uart.h"
 #include "sys.h"
 #include "user.h"
+#include "file.h"
+
 
 
 void kernel_process(){
@@ -36,6 +38,7 @@ void kernel_main()
 //	generic_timer_init();
 	enable_interrupt_controller();
 	enable_irq();
+	file_init();
 
 	int res = copy_process(PF_KTHREAD, (unsigned long)&kernel_process, 0);
 	if (res < 0) {

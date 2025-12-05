@@ -17,6 +17,8 @@
 #define TASK_INTERRUPTIBLE			2
 
 #define PF_KTHREAD				0x00000002
+#define NOFILE 16  // Max fichiers ouverts par processus
+
 
 
 extern struct task_struct *current;
@@ -65,6 +67,7 @@ struct task_struct {
 	long preempt_count;
 	unsigned long flags;
 	struct mm_struct mm;
+	struct file *ofile[NOFILE]; // Table des descripteurs de fichiers
 
 	unsigned long channel;  // for sleep_on / wake_up
 };

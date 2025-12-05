@@ -2,6 +2,7 @@
 #define _RINGBUFFER_H
 
 #include <stdint.h>
+#include "mm.h"
 
 // Calcul dynamique de la taille du tableau de données pour remplir la page
 #define RB_DATA_SIZE (PAGE_SIZE - (4 * sizeof(uint32_t)))

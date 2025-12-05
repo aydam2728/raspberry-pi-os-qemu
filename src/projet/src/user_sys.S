@@ -3,7 +3,10 @@
 .set SYS_WRITE_NUMBER, 0 		// syscal numbers
 .set SYS_FORK_NUMBER, 1
 .set SYS_EXIT_NUMBER, 2
-.set SYS_INIT_RING_NUMBER 3
+.set SYS_WRITE1_NUMBER, 3
+.set SYS_READ_NUMBER,  4
+.set SYS_PIPE_NUMBER,  5
+.set SYS_CLOSE_NUMBER, 6
 
 .globl user_delay
 user_delay:
@@ -30,8 +33,38 @@ call_sys_fork:
 	ret
 
 
-.globl call_sys_init_ringbuffer
-call_sys_init_ringbuffer:
-    mov x8, #SYS_INIT_RING_NUMBER
+/* * int call_sys_pipe(int *fds); 
+ * x0 = pointeur vers tableau de 2 ints (User Space)
+ */
+.globl call_sys_pipe
+call_sys_pipe:
+    mov w8, #SYS_PIPE_NUMBER   /* x8 contient le numéro du syscall */
+    svc #0                     /* Interruption logicielle -> Saut vers le Kernel */
+    ret                        /* Retour à l'appelant, x0 contient le code retour */
+
+/* * int call_sys_write(int fd, char *buf, int n);
+ * x0=fd, x1=buf, x2=n
+ */
+.globl call_sys_write1
+call_sys_write1:
+    mov w8, #SYS_WRITE1_NUMBER
+    svc #0
+    ret
+
+/* * int call_sys_read(int fd, char *buf, int n);
+ * x0=fd, x1=buf, x2=n
+ */
+.globl call_sys_read
+call_sys_read:
+    mov w8, #SYS_READ_NUMBER
+    svc #0
+    ret
+
+/* * int call_sys_close(int fd);
+ * x0=fd
+ */
+.globl call_sys_close
+call_sys_close:
+    mov w8, #SYS_CLOSE_NUMBER
     svc #0
     ret
