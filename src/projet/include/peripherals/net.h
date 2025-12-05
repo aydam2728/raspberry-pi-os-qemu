@@ -5,6 +5,10 @@
 #include <stdint.h>
 
 int net_init(void);
+/*added*/
+int net_send_packet(const uint8_t *packet, uint32_t length);
+int net_receive_packet(uint8_t *packet, uint32_t max_length);
+struct net_device *net_get_device(void);
 
 // --- CONSTANTES ---
 #define ETH_ALEN 6
@@ -15,6 +19,8 @@ int net_init(void);
 #define NET_STATE_LINK_DOWN 2
 #define NET_STATE_LINK_UP   3
 
+
+// --- STRUCTURES ---
 // --- STRUCTURES ---
 struct net_device {
     uint8_t mac_addr[ETH_ALEN];
@@ -58,7 +64,7 @@ struct usb_config_descriptor {
 
 #define USB_REQ_SET_CONFIGURATION   0x09
 
-// Types de descripteurs (AJOUT CRITIQUE)
+// Types de descripteurs 
 #define USB_DT_DEVICE           0x01
 #define USB_DT_CONFIGURATION    0x02
 
@@ -75,6 +81,8 @@ struct usb_config_descriptor {
 #define USB_GINTMSK     0x018
 #define USB_GRXFSIZ     0x024
 #define USB_GNPTXFSIZ   0x028
+#define USB_HAINT       0x414  // Host All Interrupts Register
+#define USB_HAINTMSK    0x418  // Host All Interrupts Mask Register
 
 #define USB_GAHBCFG_GLBL_INTR_EN    (1 << 0)
 #define USB_GAHBCFG_HBSTLEN_INCR4   (1 << 1)
@@ -88,6 +96,7 @@ struct usb_config_descriptor {
 #define GINTMSK_PRTIM   (1 << 24)
 #define GINTMSK_DISCINT (1 << 29)
 #define GINTMSK_SOF     (1 << 3)
+#define GINTMSK_RXFLVLM (1 << 4)
 
 // Registres Hôtes
 #define USB_HCFG        0x400
@@ -134,6 +143,7 @@ struct usb_config_descriptor {
 #define HCTSIZ_PID_SETUP    (3 << 29)
 #define HCTSIZ_PKTCNT(x)    ((x & 0x3FF) << 19)
 #define HCTSIZ_XFRSIZ(x)    ((x & 0x7FFFF) << 0)
+#define HCTSIZ_XFRSIZ_MASK  0x7FFFF
 
 // HCINT Bits
 #define HCINT_XFRC          (1 << 0) 
@@ -143,8 +153,18 @@ struct usb_config_descriptor {
 #define HCINT_NAK           (1 << 4)
 #define HCINT_ACK           (1 << 5)
 #define HCINT_TXERR         (1 << 10)
+#define HCINTMSK_XFRCM      (1 << 0)  // Transfer Complete Mask
+#define HCINTMSK_CHHM       (1 << 1)  // Channel Halted Mask
+#define HCINTMSK_AHBERRM    (1 << 2)  // AHB Error Mask
+#define HCINTMSK_STALLM     (1 << 3)  // STALL Response Mask
+#define HCINTMSK_NAKM       (1 << 4)  // NAK Response Mask
+#define HCINTMSK_ACKM       (1 << 5)  // ACK Response Mask
+#define HCINTMSK_TXERRM     (1 << 10) // Transaction Error Mask
+#define HCINTMSK_BBLERRM    (1 << 11) // Babble Error Mask
+#define HCINTMSK_FRMORM     (1 << 12) // Frame Overrun Mask
+#define HCINTMSK_DATATGLERRM (1 << 13) // Data Toggle Error Mask
 
-// Adresses des Endpoints (Hypothèse standard QEMU usb-net)
+// Adresses des Endpoints
 #define EP_BULK_IN      1
 #define EP_BULK_OUT     2
 

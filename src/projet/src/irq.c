@@ -3,6 +3,9 @@
 #include "timer.h"
 #include "entry.h"
 #include "peripherals/irq.h"
+//#include "peripherals/net.h"
+
+extern void handle_usb_irq(void);
 
 const char *entry_error_messages[] = {
 	"SYNC_INVALID_EL1t",
@@ -32,6 +35,8 @@ void enable_interrupt_controller()
 
   // Enables Core 0 Timers interrupt control for the generic timer
 //  put32(TIMER_INT_CTRL_0, TIMER_INT_CTRL_0_VALUE);
+
+	 put32(ENABLE_BASIC_IRQS, (1<<9)); // AJOUT POUR ETHERNET 
 }
 
 void show_invalid_entry_message(int type, unsigned long esr, unsigned long address)
@@ -55,12 +60,21 @@ void handle_irq(void)
 
 void handle_irq(void)
 {
-	unsigned int irq = get32(IRQ_PENDING_1);
-	switch (irq) {
+	/*unsigned int irq = get32(IRQ_PENDING_1);*/
+
+	unsigned int irq_basic = get32(IRQ_BASIC_PENDING); // <--- AJOUT
+
+    // Si le bit 9 est levé, c'est l'USB
+    if (irq_basic & (1 << 9)) {
+        handle_usb_irq(); // Appelle votre driver USB/Eth
+        // Note: L'acquittement se fera dans le driver USB (registres DWC2), pas ici.
+    }
+
+	/*switch (irq) {
 		case (SYSTEM_TIMER_IRQ_1):
 			handle_timer_irq();
 			break;
 		default:
 			printf("Inknown pending irq: %x\r\n", irq);
-	}
+	}*/
 }

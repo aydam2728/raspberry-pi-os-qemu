@@ -1,8 +1,6 @@
-// kernel/net/icmp.h
 #ifndef NET_ICMP_H
 #define NET_ICMP_H
 
-#include "net.h"
 #include <stdint.h>
 
 #define ICMP_TYPE_ECHO_REPLY   0
@@ -19,7 +17,8 @@ struct icmp_echo {
 
 void icmp_init(void);
 void icmp_receive(uint8_t *packet, uint32_t len);
-// fonction d'envoi générique (utilisée par ARP aussi)
-void net_send_packet(uint8_t *dst_mac, uint16_t ethertype, uint8_t *payload, uint32_t payload_len);
+
+// Renommée pour éviter le conflit avec net.c
+void ethernet_send_packet(uint8_t *dst_mac, uint16_t ethertype, uint8_t *payload, uint32_t payload_len);
 
 #endif

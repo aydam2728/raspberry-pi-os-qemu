@@ -11,79 +11,73 @@
 #include "sys.h"
 #include "user.h"
 #include "peripherals/net.h"
+#include "net/icmp.h"
 
+// --- AJOUTS OBLIGATOIRES POUR LA COMPILATION ---
+// Ces fonctions sont dans net.c mais pas dans le header
+extern int net_send_packet(const uint8_t *packet, uint32_t length);
+extern int net_receive_packet(uint8_t *packet, uint32_t max_length);
+// Si vous voulez traiter le paquet (ARP/ICMP), il faudra aussi cette fonction :
+//extern void ethernet_input(uint8_t *packet, uint32_t len); 
+// -----------------------------------------------
 
 void kernel_process(){
-	printf("Kernel process started. EL %d\r\n", get_el());
-	unsigned long begin = (unsigned long)&user_begin;
-	unsigned long end = (unsigned long)&user_end;
-	unsigned long process = (unsigned long)&user_process;
-	int err = move_to_user_mode(begin, end - begin, process - begin);
-	if (err < 0){
-		printf("Error while moving process to user mode\n\r");
-	}
+    printf("Kernel process started. EL %d\r\n", get_el());
+    unsigned long begin = (unsigned long)&user_begin;
+    unsigned long end = (unsigned long)&user_end;
+    unsigned long process = (unsigned long)&user_process;
+    int err = move_to_user_mode(begin, end - begin, process - begin);
+    if (err < 0){
+        printf("Error while moving process to user mode\n\r");
+    }
 }
 
-// DÉPLACEMENT ICI : Buffer statique global et aligné pour le DMA
-// aligned(16) est une sécurité pour le cache line et les contraintes DMA
+// Buffer statique global et aligné pour le DMA
+//////// modi
 static uint8_t rx_buffer[1536] __attribute__((aligned(16)));
 
 void kernel_main()
 {
-	uart_init();
-	init_printf(NULL, putc);
+    uart_init();
+    init_printf(NULL, putc);
 
-	printf("kernel boots ...\n\r");
+    printf("kernel boots ...\n\r");
 
-	irq_vector_init();
-	timer_init();
-//	generic_timer_init();
-	enable_interrupt_controller();
-	enable_irq();
+    irq_vector_init();
+    timer_init();
+    enable_interrupt_controller();
+    enable_irq();
 
-	// --- INITIALISATION DU PILOTE ETHERNET ---
+    // --- INITIALISATION DU PILOTE ETHERNET ---
+    // (J'ai supprimé la deuxième initialisation qui était en double plus bas)
     printf("NET: Initialisation du driver réseau...\n\r");
     if (net_init() < 0) {
         printf("NET: L'initialisation du réseau a échoué ! Arrêt.\n\r");
-        // Vous pouvez décider d'arrêter le boot ou de continuer sans réseau
-        // return; 
-    }
-    printf("NET: Initialisation du driver réseau terminée.\n\r");
-    // ------------------------------------------
-
-	// Init Réseau
-    if (net_init() < 0) {
-        printf("NET: Error.\n\r");
     } else {
         printf("NET: Init OK.\n\r");
-        
-        // --- TEST D'ENVOI DE PAQUET ---
-        // Création d'un buffer Ethernet simple (Destination FF:FF... broadcast)
-        // 6 octets Dest, 6 octets Src, 2 octets Type, + Data
+
+        // --- TEST ENVOI PAQUET ---
         static uint8_t dummy_packet[64] = {
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Dest MAC (Broadcast)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Src MAC (Fake)
-            0x08, 0x00,                         // EtherType (IPv4)
-            0x45, 0x00, 0x00, 0x00              // Début Payload IP bidon...
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Dest
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Src
+            0x08, 0x00,                         // IPv4
+            0x45, 0x00, 0x00, 0x00              // Payload
         };
-        
-        // Remplissage du reste avec des A
         for(int i=14; i<64; i++) dummy_packet[i] = 0xAA;
 
         printf("KERNEL: Sending dummy packet...\n\r");
         net_send_packet(dummy_packet, 64);
-        // ------------------------------
-    
-	// --- TEST ARP ---
+
+        // --- TEST ARP REQUEST ---
+        // Demande : Qui est 10.0.2.2 ? (La gateway QEMU)
         static uint8_t arp_packet[42] = {
-             // ... (votre paquet ARP inchangé) ...
-             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Dest MAC (Broadcast)
-             0xB8, 0x27, 0xEB, 0x00, 0x00, 0x01, // Src MAC
-             0x08, 0x06,                         // EtherType ARP
-             0x00, 0x01, 0x08, 0x00, 0x06, 0x04, 0x00, 0x01, // ARP Request
+             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Broadcast
+             0xB8, 0x27, 0xEB, 0x00, 0x00, 0x01, // Src MAC (Fictif)
+             0x08, 0x06,                         // ARP
+             0x00, 0x01, 0x08, 0x00, 0x06, 0x04, 0x00, 0x01, // Request
              0xB8, 0x27, 0xEB, 0x00, 0x00, 0x01, // Sender MAC
              0x0A, 0x00, 0x02, 0x0F,             // Sender IP (10.0.2.15)
-             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Target MAC (0)
+             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Target MAC (???)
              0x0A, 0x00, 0x02, 0x02              // Target IP (10.0.2.2)
         };
 
@@ -92,36 +86,30 @@ void kernel_main()
         
         printf("KERNEL: Waiting for ARP Reply...\n\r");
         
-        // Remplir le buffer avec un motif connu pour vérifier l'écrasement
-        for(int k=0; k<1536; k++) rx_buffer[k] = 0xCC;
-
-        for (int i = 0; i < 20; i++) {
-            if (net_receive_packet(rx_buffer, 1536) > 0) {
-                printf("KERNEL: PACKET RECEIVED!\n\r");
+        // Boucle d'attente courte (juste pour voir si ça marche au boot)
+        for (int i = 0; i < 200; i++) { // J'ai augmenté un peu le délai
+            int len = net_receive_packet(rx_buffer, 1536);
+            if (len > 0) {
+                printf("KERNEL: PACKET RECEIVED! (%d bytes)\n\r", len);
                 
-                // Petit Dump Hexadécimal pour voir tout le paquet
-                printf("Dump: ");
-                for(int j=0; j<30; j++) printf("%x ", rx_buffer[j]);
-                printf("\n\r");
-
-                // Vérification spécifique ARP Reply
-                // L'en-tête Ethernet fait 14 octets.
-                // Sender MAC dans ARP est à l'offset 22 (14 + 8)
-                printf("Source MAC: %x:%x:%x:%x:%x:%x\n\r", 
-                    rx_buffer[22], rx_buffer[23], rx_buffer[24],
-                    rx_buffer[25], rx_buffer[26], rx_buffer[27]);
+                // Important : Passer le paquet à la couche réseau pour traitement (ARP/ICMP)
+                //ethernet_input(rx_buffer, len); 
                 break;
             }
-            delay(100000);
+            delay(10000);
         }
-	}
-	int res = copy_process(PF_KTHREAD, (unsigned long)&kernel_process, 0);
-	if (res < 0) {
-		printf("error while starting kernel process");
-		return;
-	}
+    }
 
-	while (1){
-		schedule();
-	}
+    int res = copy_process(PF_KTHREAD, (unsigned long)&kernel_process, 0);
+    if (res < 0) {
+        printf("error while starting kernel process");
+        return;
+    }
+
+    // Le scheduler prend la main ici.
+    // ATTENTION : Une fois ici, le réseau ne sera plus écouté
+    // sauf si vous modifiez irq.c (voir étape suivante).
+    while (1){
+        schedule();
+    }
 }
