@@ -2,9 +2,10 @@
 #include "sched.h"
 #include "fork.h"
 #include "utils.h"
+#include "fs.h"
 #include "entry.h"
 
-int copy_process(unsigned long clone_flags, unsigned long fn, unsigned long arg)
+int copy_process(unsigned long clone_flags, unsigned long fn, unsigned long arg, unsigned long stack)
 {
 	preempt_disable();
 	struct task_struct *p;
@@ -33,6 +34,13 @@ int copy_process(unsigned long clone_flags, unsigned long fn, unsigned long arg)
 
 	p->cpu_context.pc = (unsigned long)ret_from_fork;
 	p->cpu_context.sp = (unsigned long)childregs;
+	// Dans copy_process, après avoir copié task_struct :
+	for(int i = 0; i < NOFILE; i++) {
+    	if(current->ofile[i]) {
+       	  p->ofile[i] = current->ofile[i];
+          p->ofile[i]->ref++; // On incrémente le compteur de référence
+    }
+}
 	int pid = nr_tasks++;
 	task[pid] = p;
 

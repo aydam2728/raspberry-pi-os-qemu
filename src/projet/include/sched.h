@@ -12,15 +12,18 @@
 #define FIRST_TASK task[0]
 #define LAST_TASK task[NR_TASKS-1]
 
-#define TASK_RUNNING				0
-#define TASK_ZOMBIE				1
+#define TASK_RUNNING 0
+#define TASK_INTERRUPTIBLE 1 // Nouveau état pour le sommeil
+#define TASK_ZOMBIE 2
+
+#define NOFILE 16
 
 #define PF_KTHREAD				0x00000002
-
 
 extern struct task_struct *current;
 extern struct task_struct * task[NR_TASKS];
 extern int nr_tasks;
+struct file;
 
 struct cpu_context {
 	unsigned long x19;
@@ -62,7 +65,15 @@ struct task_struct {
 	long preempt_count;
 	unsigned long flags;
 	struct mm_struct mm;
+
+	void *chan;             // Adresse mémoire qu'on attend (ex: adresse du pipe)
+    struct file *ofile[NOFILE]; // Table des descripteurs de fichiers
 };
+
+// Ajoute ces prototypes
+void sleep_on(void *chan);
+void wake_up(void *chan);
+void exit_files(struct task_struct *p); // Pour nettoyer à la fin
 
 extern void sched_init(void);
 extern void schedule(void);

@@ -1,9 +1,12 @@
-#ifndef	_USER_SYS_H
-#define	_USER_SYS_H
+#ifndef _USER_SYS_H
+#define _USER_SYS_H
 
-void call_sys_write(char * buf);
+int call_sys_write(int fd, char * buf, int count);
+int call_sys_read(int fd, char * buf, int count);
+int call_sys_pipe(int *fds);
+void call_sys_close(int fd);
 int call_sys_fork();
-void call_sys_exit();
+void call_sys_exit(); 
 
 extern void user_delay ( unsigned long);
 extern unsigned long get_sp ( void );

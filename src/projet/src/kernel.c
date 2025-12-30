@@ -37,7 +37,7 @@ void kernel_main()
 	enable_interrupt_controller();
 	enable_irq();
 
-	int res = copy_process(PF_KTHREAD, (unsigned long)&kernel_process, 0);
+	int res = copy_process(PF_KTHREAD, (unsigned long)&kernel_process, 0, 0);
 	if (res < 0) {
 		printf("error while starting kernel process");
 		return;

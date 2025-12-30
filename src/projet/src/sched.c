@@ -20,6 +20,22 @@ void preempt_enable(void)
 }
 
 
+void sleep_on(void *chan) {
+    current->state = TASK_INTERRUPTIBLE;
+    current->chan = chan;
+    schedule();
+    current->chan = 0;
+}
+
+void wake_up(void *chan) {
+    for(int i = 0; i < NR_TASKS; i++) {
+        struct task_struct *p = task[i];
+        if(p && p->state == TASK_INTERRUPTIBLE && p->chan == chan) {
+            p->state = TASK_RUNNING;
+        }
+    }
+}
+
 void _schedule(void)
 {
 	preempt_disable();
