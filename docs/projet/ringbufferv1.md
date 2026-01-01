@@ -71,6 +71,8 @@ int pipe_read(struct pipe *p, char *addr, int n);
 #endif
 ```
 
+FD_NONE indique un emplacement libre (aucun fichier), FD_PIPE désigne un canal de communication temporaire en mémoire RAM, et FD_INODE représente un fichier réel stocké physiquement sur le disque.
+
 ---
 
 ## 2. Améliorations de l'Ordonnanceur (Scheduler)
