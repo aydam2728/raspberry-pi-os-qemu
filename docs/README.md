@@ -1,5 +1,4 @@
 # A tiny educational kernel for Raspberry Pi 3
-# test
 A tiny kernel *incrementally built* for OS education.
 Start with minimal, baremetal code. Then add kernel features in small doses.
 Each experiment is self-contained and can run on both QEMU and real Raspberry Pi 3 hardware.
@@ -32,6 +31,8 @@ Each experiment is self-contained and can run on both QEMU and real Raspberry Pi
       * [User processes and system calls](lesson05/rpi-os.md)
 6. **Into virtual**
       * [Virtual memory management](lesson06/rpi-os.md)
+6. **Ring Buffer**
+      * [Ring Buffer Implementation](projet/ringbufferv1.md)
 
 ## Acknowledgements
 1. Sergey Matyukevich, Alexandre Venito et al. made the educational kernel and most of the resources in https://github.com/s-matyukevich/raspberry-pi-os
