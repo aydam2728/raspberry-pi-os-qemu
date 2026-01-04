@@ -4,6 +4,8 @@
 #include "utils.h"
 #include "mm.h"
 
+
+
 static struct task_struct init_task = INIT_TASK;
 struct task_struct *current = &(init_task);
 struct task_struct * task[NR_TASKS] = {&(init_task), };
@@ -100,13 +102,76 @@ void timer_tick()
 }
 
 void exit_process(){
-	preempt_disable();
-	for (int i = 0; i < NR_TASKS; i++){
-		if (task[i] == current) {
-			task[i]->state = TASK_ZOMBIE;
-			break;
-		}
-	}
-	preempt_enable();
-	schedule();
+    
+    
+    preempt_disable(); 
+    
+    for (int i = 0; i < NR_TASKS; i++){
+        if (task[i] == current) {
+             task[i] = 0; // NE JAMAIS FAIRE CA ICI ! (Laisse le zombie pour sys_wait)
+        }
+    }
+    
+    exit_files(current);
+    
+    // DEBUG MIDDLE
+    //printf("[KERNEL] Files closed. Setting Zombie state...\n");
+
+    current->state = TASK_ZOMBIE;
+    current->exit_code = 0;
+    
+    // On réveille le parent (Méthode brute pour être sûr)
+    for(int i=0; i<NR_TASKS; i++) {
+        struct task_struct *t = task[i];
+        if(t && t->state == TASK_INTERRUPTIBLE) {
+             t->state = TASK_RUNNING;
+        }
+    }
+    
+    // DEBUG END
+    //printf("[KERNEL] Bye bye. Scheduling...\n");
+    
+    preempt_enable();
+    schedule();
+}
+
+
+
+int sys_wait(int *status) {
+    int have_kids, pid;
+    struct task_struct *p;
+
+    while(1) {
+        have_kids = 0;
+        for (int i = 0; i < NR_TASKS; i++) {
+            p = task[i];
+            // On ne vérifie pas current (soi-même) et on cherche les processus non nuls
+            if (!p || p == current) continue;
+            
+            // Si c'est un processus orphelin ou autre, on simplifie ici :
+            // Dans un vrai OS, on vérifierait p->parent_id == current->pid
+            // Pour ton OS simple, on suppose qu'on attend n'importe quel enfant.
+            
+            have_kids = 1;
+            
+            if (p->state == TASK_ZOMBIE) {
+                // On a trouvé un enfant mort !
+                pid = i; // ou p->pid si tu as un champ pid
+                
+                // Nettoyage final (Libération de la task_struct)
+                free_page((unsigned long)p - VA_START);
+                task[i] = 0; // On libère le slot dans le tableau
+                
+                return pid;
+            }
+        }
+
+        // Si pas d'enfants du tout, on retourne erreur
+        if (!have_kids || current->state == TASK_ZOMBIE) return -1;
+
+        // Si des enfants vivent encore, on dort en attendant qu'ils meurent
+        // Astuce: On utilise l'adresse de 'current' comme canal d'attente
+        // exit_process() devra faire un wake_up sur le parent.
+        sleep_on(current); 
+    }
 }

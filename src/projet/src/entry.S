@@ -174,7 +174,7 @@ el0_svc:
 	uxtw	scno, w8				// syscall number in w8
 	mov	sc_nr, #__NR_syscalls
 	bl	enable_irq
-	cmp     scno, sc_nr                     	// check upper syscall limit
+	cmp     scno, #7                   	// check upper syscall limit
 	b.hs	ni_sys
 
 	ldr	x16, [stbl, scno, lsl #3]		// address in the syscall table

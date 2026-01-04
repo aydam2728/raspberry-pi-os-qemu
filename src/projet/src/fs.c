@@ -21,11 +21,17 @@ struct file* file_alloc(void) {
 }
 
 int pipe_alloc(struct file **f0, struct file **f1) {
-    struct pipe *p;
-    unsigned long page = get_free_page();
-    if (!page) return -1;
+    // Page 1 : La structure de contrôle
+    unsigned long page_ctrl = get_free_page();
+    // Page 2 : Les données (buffer de 4096 octets)
+    unsigned long page = get_free_page(); 
+
+    if (!page_ctrl || !page) return -1;
+
+    struct pipe *p = (struct pipe *)(page_ctrl + VA_START);
     
-    p = (struct pipe *)(page + VA_START);
+    // IMPORTANT : On lie le pointeur data à la deuxième page
+    p->data = (char *)(page + VA_START);
     p->read_open = 1;
     p->write_open = 1;
     p->nwrite = 0;
@@ -49,12 +55,27 @@ int pipe_alloc(struct file **f0, struct file **f1) {
 }
 
 void file_close(struct file *f) {
-    if(f->ref < 1) return;
+
+    // SONDE 1 : On affiche l'adresse reçue
+    //printf("[DEBUG] file_close: addr=%x\n", (unsigned long)f);
+
+    if ((unsigned long)f < 0x100000) return; {
+        
+        //printf("[PANIC] file_close: Pointeur invalide detecte (Low Mem) ! Abort.\n");
+         return;
+    }
+
+
+    if(f->ref < 1){
+        //printf("[DEBUG] file_close: ref count error (<1)\n");
+        return;
+    } 
     f->ref--;
     if(f->ref > 0) return;
 
     if(f->type == FD_PIPE) {
         struct pipe *p = f->pipe;
+
         if(f->writable) {
             p->write_open = 0;
             wake_up(&p->nread);
@@ -62,11 +83,27 @@ void file_close(struct file *f) {
             p->read_open = 0;
             wake_up(&p->nwrite);
         }
+        
+        // Si plus personne n'utilise le pipe
         if(p->read_open == 0 && p->write_open == 0) {
-           // free_page((unsigned long)p - VA_START);
+            unsigned long virt_addr_struct = (unsigned long)p;
+            unsigned long virt_addr_data = (unsigned long)p->data;
+
+            // On vérifie que les adresses sont bien dans le Kernel (Sécurité)
+            if (virt_addr_struct >= VA_START) {
+                 // On libère la page de données
+                 if (virt_addr_data >= VA_START) {
+                     free_page(virt_addr_data - VA_START);
+                 }
+                 
+                 // On libère la page de structure
+                 free_page(virt_addr_struct - VA_START);
+            }
         }
     }
+
     f->type = FD_NONE;
+    f->pipe = 0; 
 }
 
 int pipe_write(struct pipe *p, char *addr, int n) {
@@ -96,4 +133,19 @@ int pipe_read(struct pipe *p, char *addr, int n) {
     }
     wake_up(&p->nwrite);
     return i;
+}
+
+// Nettoie tous les fichiers ouverts par un processus
+void exit_files(struct task_struct * p) {
+   //printf("[DEBUG] exit_files: Cleaning task %x\n", (unsigned long)p);
+    
+    for(int i = 0; i < NOFILE; i++) {
+        // SONDE 2 : On vérifie chaque slot avant d'appeler close
+        if (p->ofile[i]) {
+           // printf("[DEBUG] exit_files: Closing slot [%d] -> Ptr %x\n", i, (unsigned long)p->ofile[i]);
+            file_close(p->ofile[i]);
+            p->ofile[i] = 0;
+        }
+    }
+    //printf("[DEBUG] exit_files: Done.\n");
 }

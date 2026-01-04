@@ -5,6 +5,8 @@
 #include "mm.h"
 #include "mini_uart.h" 
 
+int copy_process(unsigned long clone_flags, unsigned long fn, unsigned long arg, unsigned long stack);
+
 // fd 1 = stdout (UART)
 int sys_write(int fd, char * buf, int count) {
     if (fd == 1) { 
@@ -78,11 +80,15 @@ void sys_exit(struct task_struct *p) {
     }
 }
 
+int sys_wait(int *status);
+
+
 void * const sys_call_table[] = {
     sys_write, // 0
     sys_fork,  // 1
     sys_exit,  // 2
     sys_read,  // 3
     sys_pipe,  // 4
-    sys_close  // 5
+    sys_close,  // 5
+    sys_wait  // 6
 };

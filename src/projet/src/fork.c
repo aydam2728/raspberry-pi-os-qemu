@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "fs.h"
 #include "entry.h"
+#include "printf.h"
 
 int copy_process(unsigned long clone_flags, unsigned long fn, unsigned long arg, unsigned long stack)
 {
@@ -12,6 +13,8 @@ int copy_process(unsigned long clone_flags, unsigned long fn, unsigned long arg,
 
 	unsigned long page = allocate_kernel_page();
 	p = (struct task_struct *) page;
+	memzero(page, PAGE_SIZE);
+	//printf("[DEBUG] Fork: Copying files from Parent %x to Child %x\n", current, p);
 	struct pt_regs *childregs = task_pt_regs(p);
 
 	if (!p)
@@ -37,8 +40,11 @@ int copy_process(unsigned long clone_flags, unsigned long fn, unsigned long arg,
 	// Dans copy_process, après avoir copié task_struct :
 	for(int i = 0; i < NOFILE; i++) {
     	if(current->ofile[i]) {
-       	  p->ofile[i] = current->ofile[i];
-          p->ofile[i]->ref++; // On incrémente le compteur de référence
+			//printf("[DEBUG] Fork: Slot [%d] valid. Addr=%x Ref=%d\n", i, current->ofile[i], current->ofile[i]->ref);
+       	  // On duplique le pointeur
+            p->ofile[i] = current->ofile[i];
+            // On incrémente le compteur de références
+            p->ofile[i]->ref++;
     }
 }
 	int pid = nr_tasks++;

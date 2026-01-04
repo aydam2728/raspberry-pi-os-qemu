@@ -6,6 +6,7 @@
 .set SYS_READ,  3
 .set SYS_PIPE,  4
 .set SYS_CLOSE, 5
+.set SYS_WAIT,  6
 
 .globl user_delay
 user_delay:
@@ -46,5 +47,11 @@ call_sys_fork:
 .globl call_sys_exit
 call_sys_exit:
     mov w8, #SYS_EXIT
+    svc #0
+    ret
+
+.globl call_sys_wait
+call_sys_wait:
+    mov w8, #SYS_WAIT
     svc #0
     ret

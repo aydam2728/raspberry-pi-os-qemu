@@ -7,6 +7,7 @@ int call_sys_pipe(int *fds);
 void call_sys_close(int fd);
 int call_sys_fork();
 void call_sys_exit(); 
+int call_sys_wait(int *status); 
 
 extern void user_delay ( unsigned long);
 extern unsigned long get_sp ( void );

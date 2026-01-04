@@ -33,6 +33,23 @@ That is, one pgtable at each of PGD/PUD/PMD. See our project document */
 
 #ifndef __ASSEMBLER__
 
+#define MAX_PROCESS_PAGES 16
+
+struct task_struct;
+
+struct user_page {
+    unsigned long phys_addr;
+    unsigned long virt_addr;
+};
+
+struct mm_struct {
+    unsigned long pgd;
+    int user_pages_count;
+    struct user_page user_pages[MAX_PROCESS_PAGES];
+    int kernel_pages_count;
+    unsigned long kernel_pages[MAX_PROCESS_PAGES];
+};
+
 #include "sched.h"
 
 unsigned long get_free_page();

@@ -15,6 +15,8 @@ unsigned int curVal = 0;
 	https://fxlin.github.io/p1-kernel/lesson03/rpi-os/#fyi-other-timers-on-rpi3
 */
 
+void timer_tick(void); 
+
 void timer_init ( void )
 {
 	curVal = get32(TIMER_CLO);
