@@ -40,10 +40,7 @@ struct cpu_context {
 // Déclaration anticipée pour casser la dépendance circulaire
 struct mm_struct; 
 
-// ATTENTION : Pour que cela compile, il faut que mm.h soit corrigé (voir Étape 2)
-// Si mm.h inclut sched.h AVANT de définir struct mm_struct, ça plantera toujours.
-// Nous supposons ici que task_struct inclut mm_struct par VALEUR, donc la définition complète est requise.
-// C'est pourquoi l'étape 2 est CRUCIALE.
+
 
 #include "mm.h" // On inclut mm.h pour avoir la définition de mm_struct
 
@@ -54,7 +51,7 @@ struct task_struct {
     long priority;
     long preempt_count;
     unsigned long flags;
-    struct mm_struct mm;        // <--- C'est ici que ça bloquait
+    struct mm_struct mm;        
     struct file *ofile[NOFILE];
     void *chan;
     long exit_code;

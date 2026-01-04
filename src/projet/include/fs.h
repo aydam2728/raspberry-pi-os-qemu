@@ -13,8 +13,8 @@
 enum file_type { FD_NONE, FD_PIPE, FD_INODE };
 
 struct pipe {
-    // char data[PIPE_SIZE];  <-- CE CODE DOIT ETRE SUPPRIMÉ
-    char *data;      // <-- TU DOIS AVOIR CA (Pointeur vers une page externe)
+    
+    char *data;      
     unsigned int nread;
     unsigned int nwrite;
     int read_open;

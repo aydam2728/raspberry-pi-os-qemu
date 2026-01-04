@@ -108,7 +108,7 @@ void exit_process(){
     
     for (int i = 0; i < NR_TASKS; i++){
         if (task[i] == current) {
-             task[i] = 0; // NE JAMAIS FAIRE CA ICI ! (Laisse le zombie pour sys_wait)
+             task[i] = 0; 
         }
     }
     
@@ -149,8 +149,7 @@ int sys_wait(int *status) {
             if (!p || p == current) continue;
             
             // Si c'est un processus orphelin ou autre, on simplifie ici :
-            // Dans un vrai OS, on vérifierait p->parent_id == current->pid
-            // Pour ton OS simple, on suppose qu'on attend n'importe quel enfant.
+            
             
             have_kids = 1;
             
@@ -170,7 +169,7 @@ int sys_wait(int *status) {
         if (!have_kids || current->state == TASK_ZOMBIE) return -1;
 
         // Si des enfants vivent encore, on dort en attendant qu'ils meurent
-        // Astuce: On utilise l'adresse de 'current' comme canal d'attente
+        // On utilise l'adresse de 'current' comme canal d'attente
         // exit_process() devra faire un wake_up sur le parent.
         sleep_on(current); 
     }
