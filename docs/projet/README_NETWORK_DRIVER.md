@@ -1151,6 +1151,4 @@ Ce driver réseau implémente une pile complète **USB DWC2 → RNDIS → Ethern
 
 Le code est prêt pour :
 - Développement sur QEMU (mode dégradé)
-- Déploiement sur vrai RPi3 (mode complet)
 - Extension vers TCP/IP complet
-- Intégration dans un OS plus large
